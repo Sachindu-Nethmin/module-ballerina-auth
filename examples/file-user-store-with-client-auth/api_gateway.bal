@@ -179,24 +179,16 @@ service /inventory on apiGateway {
             return http:BAD_REQUEST;
         }
         
-        Product? product = products[productId];
-        if product is () {
+        if !products.hasKey(productId) {
             return http:NOT_FOUND;
         }
+        Product product = products.get(productId);
         
         // Update stock in the table
-        Product updatedProduct = {
-            id: product.id,
-            name: product.name,
-            category: product.category,
-            price: product.price,
-            stock: newStock,
-            description: product.description
-        };
-        
-        products.put(updatedProduct);
+        product.stock = newStock;
+        products.put(product);
         log:printInfo(string `Updated stock for product ${productId}: ${newStock}`);
-        return updatedProduct;
+        return product;
     }
     
     // Add new product - requires inventory:manage scope
@@ -268,17 +260,16 @@ service /orders on apiGateway {
     // Get specific order by ID - requires orders:read scope
     resource function get [string orderId](@http:Header string? Authorization) returns Order|http:NotFound|http:Forbidden {
         string customerId = getCustomerId(Authorization);
-        Order? orderRecord = orders[orderId];
-        
-        if orderRecord is () {
+        if !orders.hasKey(orderId) {
             return http:NOT_FOUND;
         }
-        
+        Order orderRecord = orders.get(orderId);
+
         // Check if the order belongs to the authenticated user
         if orderRecord.customerId != customerId {
             return http:FORBIDDEN;
         }
-        
+
         return orderRecord;
     }
 }
@@ -302,23 +293,16 @@ service /admin on apiGateway {
     
     // Update order status - admin only
     resource function put orders/[string orderId]/status(string status) returns Order|http:NotFound {
-        Order? orderRecord = orders[orderId];
-        if orderRecord is () {
+        if !orders.hasKey(orderId) {
             return http:NOT_FOUND;
         }
-        
-        Order updatedOrder = {
-            id: orderRecord.id,
-            customerId: orderRecord.customerId,
-            items: orderRecord.items,
-            totalAmount: orderRecord.totalAmount,
-            status: status,
-            createdAt: orderRecord.createdAt
-        };
-        
-        orders.put(updatedOrder);
+        Order orderRecord = orders.get(orderId);
+
+        // Mutate the existing order record's status and persist it.
+        orderRecord.status = status;
+        orders.put(orderRecord);
         log:printInfo(string `Updated order ${orderId} status to ${status}`);
-        return updatedOrder;
+        return orderRecord;
     }
 }
 
