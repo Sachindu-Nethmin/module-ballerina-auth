@@ -16,8 +16,9 @@
 
 import ballerina/auth;
 import ballerina/http;
-import ballerina/io;
 import ballerina/uuid;
+import ballerina/log;
+import ballerina/time;
 
 // Data types for the API
 type Product record {|
@@ -112,19 +113,18 @@ http:FileUserStoreConfig config = {};
 http:ListenerFileUserStoreBasicAuthHandler authHandler = new (config);
 
 // Client configuration for backend inventory service
+configurable string username = ?;
+configurable string password = ?;
 auth:CredentialsConfig clientCredentials = {
-    username: "inventory_service",
-    password: "inv_secret123"
+    username,
+    password
 };
 
 auth:ClientBasicAuthProvider clientAuthProvider = new (clientCredentials);
 
 // HTTP client to inventory service with basic auth
 http:Client inventoryServiceClient = check new ("https://localhost:8080",
-    auth = {
-        username: "inventory_service",
-        password: "inv_secret123"
-    },
+    auth = clientCredentials,
     secureSocket = {
         cert: "./resources/public.crt"
     }
@@ -143,24 +143,20 @@ service /catalog on apiGateway {
     
     // Get all products - requires products:read scope
     resource function get products() returns Product[] {
-        io:println("Fetching all products from catalog");
+        log:printInfo("Fetching all products from catalog");
         return products.toArray();
     }
     
     // Get product by ID - requires products:read scope
     resource function get products/[string productId]() returns Product|http:NotFound {
-        Product? product = products[productId];
-        if product is () {
-            return http:NOT_FOUND;
-        }
-        return product;
+        return products.hasKey(productId) ? products.get(productId) : http:NOT_FOUND;
     }
     
     // Search products by category - requires products:read scope
     resource function get products/category/[string category]() returns Product[] {
-        io:println(string `Searching products in category: ${category}`);
+        log:printInfo(string `Searching products in category: ${category}`);
         Product[] filteredProducts = from Product product in products
-                                   where product.category.toLowerAscii() == category.toLowerAscii()
+                                   where product.category.equalsIgnoreCaseAscii(category)
                                    select product;
         return filteredProducts;
     }
@@ -199,7 +195,7 @@ service /inventory on apiGateway {
         };
         
         products.put(updatedProduct);
-        io:println(string `Updated stock for product ${productId}: ${newStock}`);
+        log:printInfo(string `Updated stock for product ${productId}: ${newStock}`);
         return updatedProduct;
     }
     
@@ -210,12 +206,11 @@ service /inventory on apiGateway {
         }
         
         products.add(newProduct);
-        io:println(string `Added new product: ${newProduct.name}`);
+        log:printInfo(string `Added new product: ${newProduct.name}`);
         return newProduct;
     }
 }
 
-// Order management service - requires order access and uses client auth for inventory checks
 @http:ServiceConfig {
     auth: [
         {
@@ -236,15 +231,8 @@ service /orders on apiGateway {
         
         // Validate each order item and check inventory using client authentication
         foreach OrderItem item in orderRequest.items {
-            Product? product = products[item.productId];
-            if product is () {
-                io:println(string `Product not found: ${item.productId}`);
-                return http:BAD_REQUEST;
-            }
-            
-            // Check inventory availability
-            if product.stock < item.quantity {
-                io:println(string `Insufficient stock for product ${item.productId}. Requested: ${item.quantity}, Available: ${product.stock}`);
+            if !products.hasKey(item.productId) {
+                log:printWarn(`Product ${item.productId} is not found`);
                 return http:BAD_REQUEST;
             }
             
@@ -256,15 +244,15 @@ service /orders on apiGateway {
         // Create order
         Order newOrder = {
             id: uuid:createType4AsString(),
-            customerId: customerId,
+            customerId,
             items: validatedItems,
-            totalAmount: totalAmount,
+            totalAmount,
             status: "PENDING",
-            createdAt: "2025-01-01T10:00:00Z" // In real scenario, use current timestamp
+            createdAt: time:utcToString(time:utcNow())
         };
         
         orders.add(newOrder);
-        io:println(string `Created order ${newOrder.id} for customer ${customerId}`);
+        log:printInfo(string `Created order ${newOrder.id} for customer ${customerId}`);
         return newOrder;
     }
     
@@ -308,7 +296,7 @@ service /admin on apiGateway {
     
     // Get all orders - admin only
     resource function get orders() returns Order[] {
-        io:println("Admin fetching all orders");
+        log:printInfo("Admin fetching all orders");
         return orders.toArray();
     }
     
@@ -329,7 +317,7 @@ service /admin on apiGateway {
         };
         
         orders.put(updatedOrder);
-        io:println(string `Updated order ${orderId} status to ${status}`);
+        log:printInfo(string `Updated order ${orderId} status to ${status}`);
         return updatedOrder;
     }
 }
