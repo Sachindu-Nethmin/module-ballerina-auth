@@ -25,15 +25,36 @@ http:Client testClient = check new ("https://localhost:9090",
     }
 );
 
+http:Client aliceClient = check new ("https://localhost:9090",
+    auth = { username: "alice", password: "alice@123" },
+    secureSocket = { cert: "./tests/resources/public.crt" }
+);
+
+http:Client bobClient = check new ("https://localhost:9090",
+    auth = { username: "bob", password: "bob@123" },
+    secureSocket = { cert: "./tests/resources/public.crt" }
+);
+
+http:Client adminClient = check new ("https://localhost:9090",
+    auth = { username: "admin", password: "admin@999" },
+    secureSocket = { cert: "./tests/resources/public.crt" }
+);
+
+http:Client inventoryMgrClient = check new ("https://localhost:9090",
+    auth = { username: "inventory_manager", password: "inv_mgr@456" },
+    secureSocket = { cert: "./tests/resources/public.crt" }
+);
+
+// Invalid credentials client
+http:Client invalidClient = check new ("https://localhost:9090",
+    auth = { username: "invalid", password: "invalid" },
+    secureSocket = { cert: "./tests/resources/public.crt" }
+);
+
 @test:Config {}
 function testProductCatalogWithValidAuth() returns error? {
-    // Test with alice (has products:read scope)
-    string authHeader = "Basic " + "alice:alice@123".toBytes().toBase64();
-    
-    http:Response response = check testClient->get("/catalog/products", {
-        "Authorization": authHeader
-    });
-    
+    // Test with alice (has products:read scope) — use auth-configured client
+    http:Response response = check aliceClient->get("/catalog/products");
     test:assertEquals(response.statusCode, 200);
     json products = check response.getJsonPayload();
     test:assertTrue(products is json[]);
@@ -41,13 +62,8 @@ function testProductCatalogWithValidAuth() returns error? {
 
 @test:Config {}
 function testProductCatalogWithInvalidAuth() returns error? {
-    // Test with invalid credentials
-    string authHeader = "Basic " + "invalid:invalid".toBytes().toBase64();
-    
-    http:Response response = check testClient->get("/catalog/products", {
-        "Authorization": authHeader
-    });
-    
+    // Test with invalid credentials — use invalidClient
+    http:Response response = check invalidClient->get("/catalog/products");
     test:assertEquals(response.statusCode, 401);
 }
 
@@ -61,8 +77,6 @@ function testProductCatalogWithoutAuth() returns error? {
 @test:Config {}
 function testOrderCreationWithValidScope() returns error? {
     // Test with alice (has orders:create scope)
-    string authHeader = "Basic " + "alice:alice@123".toBytes().toBase64();
-    
     json orderRequest = {
         "items": [
             {
@@ -72,12 +86,7 @@ function testOrderCreationWithValidScope() returns error? {
             }
         ]
     };
-    
-    http:Response response = check testClient->post("/orders", orderRequest, {
-        "Authorization": authHeader,
-        "Content-Type": mime:APPLICATION_JSON
-    });
-    
+    http:Response response = check aliceClient->post("/orders", orderRequest, { "Content-Type": mime:APPLICATION_JSON });
     test:assertEquals(response.statusCode, 201);  // POST operations return 201 (Created)
     json createdOrder = check response.getJsonPayload();
     test:assertEquals(createdOrder.customerId, "alice");
@@ -86,9 +95,6 @@ function testOrderCreationWithValidScope() returns error? {
 
 @test:Config {}
 function testOrderCreationWithInvalidScope() returns error? {
-    // Test with bob (doesn't have orders:create scope)
-    string authHeader = "Basic " + "bob:bob@123".toBytes().toBase64();
-    
     json orderRequest = {
         "items": [
             {
@@ -98,20 +104,14 @@ function testOrderCreationWithInvalidScope() returns error? {
             }
         ]
     };
-    
-    http:Response response = check testClient->post("/orders", orderRequest, {
-        "Authorization": authHeader,
-        "Content-Type": mime:APPLICATION_JSON
-    });
-    
+    // Use bobClient (bob does not have orders:create scope)
+    http:Response response = check bobClient->post("/orders", orderRequest, { "Content-Type": mime:APPLICATION_JSON });
     test:assertEquals(response.statusCode, 403);
 }
 
 @test:Config {}
 function testGetUserOrdersWithValidAuth() returns error? {
-    // First create an order with alice
-    string authHeader = "Basic " + "alice:alice@123".toBytes().toBase64();
-    
+    // First create an order with alice (use aliceClient)
     json orderRequest = {
         "items": [
             {
@@ -121,19 +121,11 @@ function testGetUserOrdersWithValidAuth() returns error? {
             }
         ]
     };
-    
-    http:Response createResponse = check testClient->post("/orders", orderRequest, {
-        "Authorization": authHeader,
-        "Content-Type": mime:APPLICATION_JSON
-    });
-    
+    http:Response createResponse = check aliceClient->post("/orders", orderRequest, { "Content-Type": mime:APPLICATION_JSON });
     test:assertEquals(createResponse.statusCode, 201);  // POST operations return 201 (Created)
-    
+
     // Now get alice's orders
-    http:Response getResponse = check testClient->get("/orders", {
-        "Authorization": authHeader
-    });
-    
+    http:Response getResponse = check aliceClient->get("/orders");
     test:assertEquals(getResponse.statusCode, 200);
     json orders = check getResponse.getJsonPayload();
     test:assertTrue(orders is json[]);
@@ -142,12 +134,7 @@ function testGetUserOrdersWithValidAuth() returns error? {
 @test:Config {}
 function testAdminAccessWithValidScope() returns error? {
     // Test with admin (has admin scope)
-    string authHeader = "Basic " + "admin:admin@999".toBytes().toBase64();
-    
-    http:Response response = check testClient->get("/admin/orders", {
-        "Authorization": authHeader
-    });
-    
+    http:Response response = check adminClient->get("/admin/orders");
     test:assertEquals(response.statusCode, 200);
     json allOrders = check response.getJsonPayload();
     test:assertTrue(allOrders is json[]);
@@ -156,24 +143,14 @@ function testAdminAccessWithValidScope() returns error? {
 @test:Config {}
 function testAdminAccessWithInvalidScope() returns error? {
     // Test with alice (doesn't have admin scope)
-    string authHeader = "Basic " + "alice:alice@123".toBytes().toBase64();
-    
-    http:Response response = check testClient->get("/admin/orders", {
-        "Authorization": authHeader
-    });
-    
+    http:Response response = check aliceClient->get("/admin/orders");
     test:assertEquals(response.statusCode, 403);
 }
 
 @test:Config {}
 function testProductSearchByCategory() returns error? {
     // Test with alice (has products:read scope)
-    string authHeader = "Basic " + "alice:alice@123".toBytes().toBase64();
-    
-    http:Response response = check testClient->get("/catalog/products/category/Electronics", {
-        "Authorization": authHeader
-    });
-    
+    http:Response response = check aliceClient->get("/catalog/products/category/Electronics");
     test:assertEquals(response.statusCode, 200);
     json products = check response.getJsonPayload();
     test:assertTrue(products is json[]);
@@ -188,12 +165,7 @@ function testProductSearchByCategory() returns error? {
 @test:Config {}
 function testGetSpecificProduct() returns error? {
     // Test with alice (has products:read scope)
-    string authHeader = "Basic " + "alice:alice@123".toBytes().toBase64();
-    
-    http:Response response = check testClient->get("/catalog/products/P001", {
-        "Authorization": authHeader
-    });
-    
+    http:Response response = check aliceClient->get("/catalog/products/P001");
     test:assertEquals(response.statusCode, 200);
     json product = check response.getJsonPayload();
     test:assertEquals(product.id, "P001");
@@ -203,20 +175,13 @@ function testGetSpecificProduct() returns error? {
 @test:Config {}
 function testGetNonExistentProduct() returns error? {
     // Test with alice (has products:read scope)
-    string authHeader = "Basic " + "alice:alice@123".toBytes().toBase64();
-    
-    http:Response response = check testClient->get("/catalog/products/P999", {
-        "Authorization": authHeader
-    });
-    
+    http:Response response = check aliceClient->get("/catalog/products/P999");
     test:assertEquals(response.statusCode, 404);
 }
 
 @test:Config {}
 function testAddNewProductWithValidScope() returns error? {
     // Test with inventory_manager (has inventory:manage scope)
-    string authHeader = "Basic " + "inventory_manager:inv_mgr@456".toBytes().toBase64();
-    
     json newProduct = {
         "id": "P005",
         "name": "Gaming Mouse",
@@ -225,12 +190,7 @@ function testAddNewProductWithValidScope() returns error? {
         "stock": 40,
         "description": "High-precision gaming mouse"
     };
-    
-    http:Response response = check testClient->post("/inventory/products", newProduct, {
-        "Authorization": authHeader,
-        "Content-Type": mime:APPLICATION_JSON
-    });
-    
+    http:Response response = check inventoryMgrClient->post("/inventory/products", newProduct, { "Content-Type": mime:APPLICATION_JSON });
     test:assertEquals(response.statusCode, 201);  // POST operations return 201 (Created)
     json addedProduct = check response.getJsonPayload();
     test:assertEquals(addedProduct.id, "P005");
@@ -239,9 +199,6 @@ function testAddNewProductWithValidScope() returns error? {
 
 @test:Config {}
 function testOrderCreationWithInsufficientStock() returns error? {
-    // Test with alice trying to order more than available stock
-    string authHeader = "Basic " + "alice:alice@123".toBytes().toBase64();
-    
     json orderRequest = {
         "items": [
             {
@@ -251,11 +208,7 @@ function testOrderCreationWithInsufficientStock() returns error? {
             }
         ]
     };
-    
-    http:Response response = check testClient->post("/orders", orderRequest, {
-        "Authorization": authHeader,
-        "Content-Type": mime:APPLICATION_JSON
-    });
-    
+    // Use aliceClient to submit the request with alice's credentials
+    http:Response response = check aliceClient->post("/orders", orderRequest, { "Content-Type": mime:APPLICATION_JSON });
     test:assertEquals(response.statusCode, 400); // Bad Request due to insufficient stock
 }
