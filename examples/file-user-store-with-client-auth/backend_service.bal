@@ -15,7 +15,8 @@
 // under the License.
 
 import ballerina/http;
-import ballerina/io;
+import ballerina/log;
+
 
 // Sample inventory data
 map<int> inventory = {
@@ -47,22 +48,22 @@ listener http:Listener inventoryService = new (8080,
 service /inventory on inventoryService {
     
     // Check product availability - requires system:inventory scope
-    resource function post 'check(@http:Payload json request) returns json|error {
-        string productId = check request.productId.ensureType(string);
-        int quantity = check request.quantity.ensureType(int);
-        
-        io:println(string `Checking inventory for product: ${productId}, quantity: ${quantity}`);
-        
+    resource function post 'check(@http:Payload InventoryCheckRequest request) returns InventoryCheckResponse|error {
+        string productId = request.productId;
+        int quantity = request.quantity;
+
+        log:printInfo(string `Checking inventory for product: ${productId}, quantity: ${quantity}`);
+
         int availableStock = inventory[productId] ?: 0;
         boolean available = availableStock >= quantity;
-        
-        json response = {
-            "productId": productId,
-            "available": available,
-            "availableStock": availableStock
+
+        InventoryCheckResponse response = {
+            productId: productId,
+            available: available,
+            availableStock: availableStock
         };
-        
-        io:println(string `Inventory check result - Product: ${productId}, Available: ${available}, Stock: ${availableStock}`);
+
+        log:printInfo(string `Inventory check result - Product: ${productId}, Available: ${available}, Stock: ${availableStock}`);
         return response;
     }
     
@@ -73,7 +74,7 @@ service /inventory on inventoryService {
         }
         
         inventory[productId] = newStock;
-        io:println(string `Updated inventory for product ${productId}: ${newStock}`);
+        log:printInfo(string `Updated inventory for product ${productId}: ${newStock}`);
         
         return {
             "productId": productId,
@@ -97,10 +98,10 @@ service /inventory on inventoryService {
 }
 
 public function main() {
-    io:println("Backend Inventory Service started on https://localhost:8080");
-    io:println("Available endpoints:");
-    io:println("  POST /inventory/check - Check product availability");
-    io:println("  PUT /inventory/products/{productId}/stock - Update product stock");
-    io:println("  GET /inventory/products/{productId}/stock - Get current stock");
-    io:println("Authentication required: Basic Auth with 'inventory_service' user and 'system:inventory' scope");
+    log:printInfo("Backend Inventory Service started on https://localhost:8080");
+    log:printInfo("Available endpoints:");
+    log:printInfo("  POST /inventory/check - Check product availability");
+    log:printInfo("  PUT /inventory/products/{productId}/stock - Update product stock");
+    log:printInfo("  GET /inventory/products/{productId}/stock - Get current stock");
+    log:printInfo("Authentication required: Basic Auth with 'inventory_service' user and 'system:inventory' scope");
 }
