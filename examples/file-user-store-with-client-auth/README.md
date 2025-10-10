@@ -23,7 +23,7 @@ This example demonstrates the integration of **File User Store** authentication 
 ## Architecture
 
 ```
-┌─────────────────┐    HTTPS/Basic Auth    ┌──────────────────┐
+┌─────────────────┐    HTTPS/Basic Auth     ┌──────────────────┐
 │   API Gateway   │ ──────────────────────► │ Backend Inventory│
 │   (Port 9090)   │                         │   Service        │
 │                 │                         │   (Port 8080)    │
@@ -101,7 +101,7 @@ When creating orders, the API Gateway demonstrates client authentication by:
 
 **Note:** This is a Ballerina package. Run the entire package instead of individual files.
 
-1. **Start both services simultaneously:**
+Start both services simultaneously:
    ```bash
    cd file-user-store-with-client-auth
    bal run
