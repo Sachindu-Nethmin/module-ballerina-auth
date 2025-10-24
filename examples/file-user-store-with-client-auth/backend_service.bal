@@ -26,6 +26,12 @@ map<int> inventory = {
     "P004": 30
 };
 
+type InventoryUpdateResponse record {
+    string productId;
+    int newStock;
+    string message;
+};
+
 // Backend inventory service listener with HTTPS
 listener http:Listener inventoryService = new (8080,
     secureSocket = {
@@ -68,18 +74,19 @@ service /inventory on inventoryService {
     }
     
     // Update inventory - requires system:inventory scope
-    resource function put products/[string productId]/stock(int newStock) returns map<string>|http:NotFound {
+    resource function put products/[string productId]/stock(int newStock)
+            returns InventoryUpdateResponse|http:NotFound {
         if !inventory.hasKey(productId) {
             return http:NOT_FOUND;
         }
-        
+
         inventory[productId] = newStock;
         log:printInfo(string `Updated inventory for product ${productId}: ${newStock}`);
-        
+
         return {
-            "productId": productId,
-            "newStock": newStock.toString(),
-            "message": "Inventory updated successfully"
+            productId,
+            newStock,
+            message: "Inventory updated successfully"
         };
     }
     
