@@ -58,9 +58,9 @@ service /inventory on inventoryService {
         boolean available = availableStock >= quantity;
 
         InventoryCheckResponse response = {
-            productId: productId,
-            available: available,
-            availableStock: availableStock
+            productId,
+            available,
+            availableStock
         };
 
         log:printInfo(string `Inventory check result - Product: ${productId}, Available: ${available}, Stock: ${availableStock}`);
@@ -97,11 +97,3 @@ service /inventory on inventoryService {
     }
 }
 
-public function main() {
-    log:printInfo("Backend Inventory Service started on https://localhost:8080");
-    log:printInfo("Available endpoints:");
-    log:printInfo("  POST /inventory/check - Check product availability");
-    log:printInfo("  PUT /inventory/products/{productId}/stock - Update product stock");
-    log:printInfo("  GET /inventory/products/{productId}/stock - Get current stock");
-    log:printInfo("Authentication required: Basic Auth with 'inventory_service' user and 'system:inventory' scope");
-}
